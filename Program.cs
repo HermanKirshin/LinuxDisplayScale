@@ -61,8 +61,6 @@ namespace GetDisplayScale
             static bool IsFractional(double value) => Math.Abs(value - Math.Truncate(value)) > 0.0001;
             static bool EqualsInteger(double value, int cmp) => !IsFractional(value) && (int)value == cmp;
 
-                //var hasFractionalMatrixScale = monitorInfo.Any(x => IsFractional(x.))
-            
             monitorInfo.ForEach(x =>
             {
                 
