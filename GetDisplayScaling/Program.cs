@@ -19,117 +19,6 @@ namespace GetDisplayScale
             Console.WriteLine(configurationString);
         }
 
-        // Xwayland sets randr monitor names to XWAYLAND0, XWAYLAND1 etc. They are created in wl_output enumeration order by wl_registry_listener.
-        // Not sure if it is guaranteed, so better to match by coordinates. Xwayland sets x and y for randr monitors exact as they come from geometry callback from zxdg_output_v1_listener (if available) or wl_output_listener.
-        // See calls to RRCrtcNotify in xwayland-output.c. Randr returns crtc coordinates in monitor geometry (see RRMonitorGetGeometry in rrmonitor.c), so it will give exact match.
-        private static IReadOnlyDictionary<XRandrMonitorInfo, WaylandMonitorInfo> MatchWaylandMonitors(IReadOnlyList<XRandrMonitorInfo> xRandrMonitors, IReadOnlyList<WaylandMonitorInfo> waylandMonitors, double maxWaylandScaleFactor)
-        {
-            var result = new Dictionary<XRandrMonitorInfo, WaylandMonitorInfo>();
-
-            if (xRandrMonitors.Count == 1 && waylandMonitors.Count == 1)
-            {
-                result.Add(xRandrMonitors.Single(), waylandMonitors.Single());
-                return result;
-            }
-
-            foreach (var xRandrMonitor in xRandrMonitors)
-            {
-                var waylandMonitor = waylandMonitors.SingleOrDefault(x => IsEquivalentPixelPosition(xRandrMonitor, x, maxWaylandScaleFactor));
-                if (waylandMonitor != null)
-                    result.Add(xRandrMonitor, waylandMonitor);
-            }
-
-            // Smart matching failed, try to rely on same order
-            if (xRandrMonitors.Count == waylandMonitors.Count && result.Count < xRandrMonitors.Count)
-            {
-                result.Clear();
-                for (var i = 0; i < xRandrMonitors.Count; i++)
-                    result.Add(xRandrMonitors[i], waylandMonitors[i]);
-            }
-
-            return result;
-        }
-
-        private static IReadOnlyDictionary<WaylandMonitorInfo, double> GetWaylandScaleFactors(IReadOnlyList<WaylandMonitorInfo> waylandMonitors, IReadOnlyList<KdeWaylandMonitorInfo> kdeWaylandMonitors)
-        {
-            var result = new Dictionary<WaylandMonitorInfo, double>();
-            foreach (var waylandMonitor in waylandMonitors)
-            {
-                KdeWaylandMonitorInfo kdeWaylandMonitor = null;
-                    
-                // Names like eDP-1
-                if (waylandMonitor.XdgName != null)
-                    kdeWaylandMonitor = kdeWaylandMonitors.SingleOrDefault(x => x.Name == waylandMonitor.XdgName);
-
-                // xdg_output not supported
-                kdeWaylandMonitor ??= kdeWaylandMonitors.SingleOrDefault(x => x.X == waylandMonitor.X && x.Y == waylandMonitor.Y);
-
-                result.Add(waylandMonitor, kdeWaylandMonitor?.Scale ?? waylandMonitor.Scale);
-            }
-            return result;
-        }
-
-        private static IReadOnlyDictionary<XRandrMonitorInfo, GtkMonitorInfo> MatchGtkMonitors(IReadOnlyList<XRandrMonitorInfo> xRandrMonitors, IReadOnlyList<GtkMonitorInfo> gtkMonitors)
-        {
-            var result = new Dictionary<XRandrMonitorInfo, GtkMonitorInfo>();
-
-            if (xRandrMonitors.Count == 1 && gtkMonitors.Count == 1)
-                result.Add(xRandrMonitors.Single(), gtkMonitors.Single());
-            else
-            {
-                foreach (var xRandrMonitor in xRandrMonitors)
-                {
-                    var gtkMonitor = gtkMonitors.SingleOrDefault(x => x.XId == xRandrMonitor.Id);
-                    
-                    // just in case, likely will not be called because match by XID should work 
-                    if (gtkMonitor == null)
-                        gtkMonitor = gtkMonitors.FirstOrDefault(x => x.X == xRandrMonitor.X && x.Y == xRandrMonitor.Y);
-
-                    if (gtkMonitor != null)
-                        result.Add(xRandrMonitor, gtkMonitor);
-                }
-            }
-
-            return result;
-        }
-        
-        private static IReadOnlyDictionary<XRandrMonitorInfo, double> MapEnvironmentVariables(IReadOnlyList<XRandrMonitorInfo> xRandrMonitors)
-        {
-            var qtFactor = EnvironmentVariables.QtScaleFactor;
-            var qtScreenFactors = EnvironmentVariables.QtScreenScaleFactor;
-            var gdkScale = EnvironmentVariables.GtktScale;
-
-            var result = new Dictionary<XRandrMonitorInfo, double>();
-            for (var i = 0; i < xRandrMonitors.Count; i++)
-            {
-                var qtScreenFactor = 
-                    qtScreenFactors.Where(x => x.Item1 == xRandrMonitors[i].Name).Select(x => (double?)x.Item2).FirstOrDefault() ??
-                    (i < qtScreenFactors.Count && qtScreenFactors[i].Item1 == null ? qtScreenFactors[i].Item2 : default(double?));
-
-                var value = new[] { qtFactor, qtScreenFactor, gdkScale }
-                    .Where(x => x != null).OrderByDescending(x => x.Value).FirstOrDefault();
-
-                if (value != null)
-                    result.Add(xRandrMonitors[i], value.Value);
-            }
-        
-            return result;
-        }
-
-        // Selecting min and max dimensions likely not required and dimensions can be compared directly, but just in case try to avoid potential side-effects from rotation
-        private static bool IsXrandrUpscale(XRandrMonitorInfo xRandrMonitorInfo, WaylandMonitorInfo waylandMonitorInfo, double waylandScale) =>
-            IsEquivalentPixelValue((int)(Math.Max(xRandrMonitorInfo.Width, xRandrMonitorInfo.Height) * waylandScale), Math.Max(waylandMonitorInfo.Width, waylandMonitorInfo.Height)) && 
-            IsEquivalentPixelValue((int)(Math.Min(xRandrMonitorInfo.Width, xRandrMonitorInfo.Height) * waylandScale), Math.Min(waylandMonitorInfo.Width, waylandMonitorInfo.Height));
-
-        // Wayland positions are always in logical coordinates. Mapped xrandr positions are wayland logical positions multiplied by biggest scale factor
-        private static bool IsEquivalentPixelPosition(XRandrMonitorInfo xRandrMonitorInfo, WaylandMonitorInfo waylandMonitorInfo, double maxWaylandScaleFactor) =>
-            IsEquivalentPixelValue(xRandrMonitorInfo.X, (int)(waylandMonitorInfo.X * maxWaylandScaleFactor)) && IsEquivalentPixelValue(xRandrMonitorInfo.Y, (int)(waylandMonitorInfo.Y * maxWaylandScaleFactor));
-
-        // After wayland to randr transformations values can differ by few pixels, so instead direct comparison check if difference is lesser than 1% 
-        // also if 1% is too small lets set min threshold 10px.
-        private static bool IsEquivalentPixelValue(int value1, int value2) =>
-            Math.Abs(value1 - value2) < Math.Max(10, Math.Min(value1, value2) / 100);  
-
         private static IReadOnlyDictionary<string, double> CalculateScalingFactors()
         {
             var xRandrMonitors = XRandrMonitorInfo.Enumerate();
@@ -255,5 +144,116 @@ namespace GetDisplayScale
 
             return scalingFactors;
         }
+        
+        // Xwayland sets randr monitor names to XWAYLAND0, XWAYLAND1 etc. They are created in wl_output enumeration order by wl_registry_listener.
+        // Not sure if it is guaranteed, so better to match by coordinates. Xwayland sets x and y for randr monitors from geometry callback from zxdg_output_v1_listener (if available) or wl_output_listener.
+        // See calls to RRCrtcNotify in xwayland-output.c. Randr returns crtc coordinates in monitor geometry (see RRMonitorGetGeometry in rrmonitor.c)
+        private static IReadOnlyDictionary<XRandrMonitorInfo, WaylandMonitorInfo> MatchWaylandMonitors(IReadOnlyList<XRandrMonitorInfo> xRandrMonitors, IReadOnlyList<WaylandMonitorInfo> waylandMonitors, double maxWaylandScaleFactor)
+        {
+            var result = new Dictionary<XRandrMonitorInfo, WaylandMonitorInfo>();
+
+            if (xRandrMonitors.Count == 1 && waylandMonitors.Count == 1)
+            {
+                result.Add(xRandrMonitors.Single(), waylandMonitors.Single());
+                return result;
+            }
+
+            foreach (var xRandrMonitor in xRandrMonitors)
+            {
+                var waylandMonitor = waylandMonitors.SingleOrDefault(x => IsEquivalentPixelPosition(xRandrMonitor, x, maxWaylandScaleFactor));
+                if (waylandMonitor != null)
+                    result.Add(xRandrMonitor, waylandMonitor);
+            }
+
+            // Smart matching failed, try to rely on same order
+            if (xRandrMonitors.Count == waylandMonitors.Count && result.Count < xRandrMonitors.Count)
+            {
+                result.Clear();
+                for (var i = 0; i < xRandrMonitors.Count; i++)
+                    result.Add(xRandrMonitors[i], waylandMonitors[i]);
+            }
+
+            return result;
+        }
+
+        private static IReadOnlyDictionary<WaylandMonitorInfo, double> GetWaylandScaleFactors(IReadOnlyList<WaylandMonitorInfo> waylandMonitors, IReadOnlyList<KdeWaylandMonitorInfo> kdeWaylandMonitors)
+        {
+            var result = new Dictionary<WaylandMonitorInfo, double>();
+            foreach (var waylandMonitor in waylandMonitors)
+            {
+                KdeWaylandMonitorInfo kdeWaylandMonitor = null;
+                    
+                // Names like eDP-1
+                if (waylandMonitor.XdgName != null)
+                    kdeWaylandMonitor = kdeWaylandMonitors.SingleOrDefault(x => x.Name == waylandMonitor.XdgName);
+
+                // xdg_output not supported
+                kdeWaylandMonitor ??= kdeWaylandMonitors.SingleOrDefault(x => x.X == waylandMonitor.X && x.Y == waylandMonitor.Y);
+
+                result.Add(waylandMonitor, kdeWaylandMonitor?.Scale ?? waylandMonitor.Scale);
+            }
+            return result;
+        }
+
+        private static IReadOnlyDictionary<XRandrMonitorInfo, GtkMonitorInfo> MatchGtkMonitors(IReadOnlyList<XRandrMonitorInfo> xRandrMonitors, IReadOnlyList<GtkMonitorInfo> gtkMonitors)
+        {
+            var result = new Dictionary<XRandrMonitorInfo, GtkMonitorInfo>();
+
+            if (xRandrMonitors.Count == 1 && gtkMonitors.Count == 1)
+                result.Add(xRandrMonitors.Single(), gtkMonitors.Single());
+            else
+            {
+                foreach (var xRandrMonitor in xRandrMonitors)
+                {
+                    var gtkMonitor = gtkMonitors.SingleOrDefault(x => x.XId == xRandrMonitor.Id);
+                    
+                    // just in case, likely will not be called because match by XID should work 
+                    if (gtkMonitor == null)
+                        gtkMonitor = gtkMonitors.FirstOrDefault(x => x.X == xRandrMonitor.X && x.Y == xRandrMonitor.Y);
+
+                    if (gtkMonitor != null)
+                        result.Add(xRandrMonitor, gtkMonitor);
+                }
+            }
+
+            return result;
+        }
+        
+        private static IReadOnlyDictionary<XRandrMonitorInfo, double> MapEnvironmentVariables(IReadOnlyList<XRandrMonitorInfo> xRandrMonitors)
+        {
+            var qtFactor = EnvironmentVariables.QtScaleFactor;
+            var qtScreenFactors = EnvironmentVariables.QtScreenScaleFactor;
+            var gdkScale = EnvironmentVariables.GtktScale;
+
+            var result = new Dictionary<XRandrMonitorInfo, double>();
+            for (var i = 0; i < xRandrMonitors.Count; i++)
+            {
+                var qtScreenFactor = 
+                    qtScreenFactors.Where(x => x.Item1 == xRandrMonitors[i].Name).Select(x => (double?)x.Item2).FirstOrDefault() ??
+                    (i < qtScreenFactors.Count && qtScreenFactors[i].Item1 == null ? qtScreenFactors[i].Item2 : default(double?));
+
+                var value = new[] { qtFactor, qtScreenFactor, gdkScale }
+                    .Where(x => x != null).OrderByDescending(x => x.Value).FirstOrDefault();
+
+                if (value != null)
+                    result.Add(xRandrMonitors[i], value.Value);
+            }
+        
+            return result;
+        }
+
+        // Selecting min and max dimensions likely not required and dimensions can be compared directly, but just in case try to avoid potential side-effects from rotation
+        private static bool IsXrandrUpscale(XRandrMonitorInfo xRandrMonitorInfo, WaylandMonitorInfo waylandMonitorInfo, double waylandScale) =>
+            IsEquivalentPixelValue((int)(Math.Max(xRandrMonitorInfo.Width, xRandrMonitorInfo.Height) * waylandScale), Math.Max(waylandMonitorInfo.Width, waylandMonitorInfo.Height)) && 
+            IsEquivalentPixelValue((int)(Math.Min(xRandrMonitorInfo.Width, xRandrMonitorInfo.Height) * waylandScale), Math.Min(waylandMonitorInfo.Width, waylandMonitorInfo.Height));
+
+        // Wayland positions are always in logical coordinates. Mapped xrandr positions are wayland logical positions multiplied by biggest scale factor
+        private static bool IsEquivalentPixelPosition(XRandrMonitorInfo xRandrMonitorInfo, WaylandMonitorInfo waylandMonitorInfo, double maxWaylandScaleFactor) =>
+            IsEquivalentPixelValue(xRandrMonitorInfo.X, (int)(waylandMonitorInfo.X * maxWaylandScaleFactor)) && IsEquivalentPixelValue(xRandrMonitorInfo.Y, (int)(waylandMonitorInfo.Y * maxWaylandScaleFactor));
+
+        // After wayland to randr transformations values can differ by few pixels, so instead direct comparison check if difference is lesser than 1% 
+        // also if 1% is too small lets set min threshold 10px.
+        private static bool IsEquivalentPixelValue(int value1, int value2) =>
+            Math.Abs(value1 - value2) < Math.Max(10, Math.Min(value1, value2) / 100);
     }
 }
