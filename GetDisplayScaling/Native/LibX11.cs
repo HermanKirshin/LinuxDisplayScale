@@ -7,13 +7,13 @@ public static unsafe class LibX11
     public const string Lib = "libX11.so.6";
     public static bool Exists => LibDl.CanBeLoaded(Lib);
     
-    // XCloseDisplay fails, so for all read-only actions use one static handle instead opening display everywhere
-    //sprivate static readonly Lazy<IntPtr> ourXDisplay = new (() => (IntPtr)XOpenDisplay(null));
+    // XCloseDisplay may fail with "free(): double free detected in tcache 2", so for all read-only actions use one static handle instead opening display everywhere
+    private static readonly Lazy<IntPtr> ourXDisplay = new (() => (IntPtr)XOpenDisplay(null));
 
-    //public static Display* Display => (Display*)ourXDisplay.Value;
+    public static Display* Display => (Display*)ourXDisplay.Value;
     
     [DllImport(Lib)]
-    public static extern Display* XOpenDisplay([MarshalAs(UnmanagedType.LPStr)] string display);
+    private static extern Display* XOpenDisplay([MarshalAs(UnmanagedType.LPStr)] string display);
 
     [DllImport(Lib)]
     public static extern int XCloseDisplay(Display* display);

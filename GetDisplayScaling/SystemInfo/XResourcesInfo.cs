@@ -8,9 +8,7 @@ public static class XResourcesInfo
     // xrdb -q | grep Xft.dpi
     public static unsafe int? GetXftDpi()
     {
-        var display = LibX11.XOpenDisplay(null);
-        
-        var resourceStringPtr = LibX11.XResourceManagerString(display);
+        var resourceStringPtr = LibX11.XResourceManagerString(LibX11.Display);
         
         var resourceString = resourceStringPtr == null ? string.Empty : new string(resourceStringPtr);
         
@@ -21,7 +19,6 @@ public static class XResourcesInfo
             .FirstOrDefault();
 
         LibX11.XFree(resourceStringPtr);
-        //LibX11.XCloseDisplay(display);
         
         return int.TryParse(xftDpiValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var xftDpi) ? xftDpi : default(int?);
     }

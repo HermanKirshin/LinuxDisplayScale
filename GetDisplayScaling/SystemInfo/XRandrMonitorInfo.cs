@@ -75,21 +75,17 @@ public sealed class XRandrMonitorInfo
         if (!LibX11.Exists || !LibXRandr.Exists)
             return result;
 
-        var display = LibX11.XOpenDisplay(null);
-
-        var rootWindow = LibX11.XDefaultRootWindow(display);
-        var resources = LibXRandr.XRRGetScreenResources(display, rootWindow);
-        var monitors = LibXRandr.XRRGetMonitors(display, rootWindow, true, out var monitorCount);
+        var rootWindow = LibX11.XDefaultRootWindow(LibX11.Display);
+        var resources = LibXRandr.XRRGetScreenResources(LibX11.Display, rootWindow);
+        var monitors = LibXRandr.XRRGetMonitors(LibX11.Display, rootWindow, true, out var monitorCount);
         for (var i = 0; i < monitorCount; i++)
         {
             for (var j = 0; j < monitors[i].noutput; j++)
-                result.Add(new XRandrMonitorInfo(display, monitors[i].outputs[j], &monitors[i], resources));
+                result.Add(new XRandrMonitorInfo(LibX11.Display, monitors[i].outputs[j], &monitors[i], resources));
         }
 
         LibXRandr.XRRFreeScreenResources(resources);
 
-        LibX11.XCloseDisplay(display);
-        
         return result.AsReadOnly();
     }
 }
