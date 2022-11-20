@@ -71,32 +71,41 @@ namespace GetDisplayScale
             else // X11
             {
                 // Currently found two environments that may have fractional scaling using xrandr transformations - XFCE and Cinnamon
-                if (xRandrMonitors.Any(x => !EqualsInteger(x.MatrixScale, 1)) && WellKnownDesktopEnvironment.Type == WellKnownDesktopEnvironmentType.Xfce)
+                if (xRandrMonitors.Any(x => !EqualsInteger(x.MatrixScale, 1)))
                 {
-                    // Unlike wayland fractional scaling Cinnamon downscales frame rendered in higher resolution, to avoid blur.
-                    // For example physical UI elements size in 3840x2160 resolution with 1.25 scale is equivalent to size in 3072x1920 resolution.
-                    // But rendering to 3072x1920 and then upscaling to 3840x2160 will cause weird blur. So rendered area is 
-                    // increased by 2 to 6144x3840 and then downscaled to 3840x2160. 
-                    
-                    // Render area size (R) is R=D*M where D - real display resolution and M - matrix scale transformation factor 
-                    // Matrix scale M=2/S where S - scale factor set in system settings (1.25, 1.75 etc). 
-                    // i.e. 3840x2160 * 2/1.25 = 6144x3840. 
+                    if (WellKnownDesktopEnvironment.Type == WellKnownDesktopEnvironmentType.Xfce)
+                    {
+                        // XFCE fractional scaling uses same downscaling approach but it is completely broken
+                        // Matrix scale transformation is set to user values from display settings as is, so R=S*M, and most applications are always rendered 100%,
+                        // Gtk values are same for all monitors and are set in Appearance - window scaling, and not affected by per monitor scale in display settings. Some apps consider this value.
+                        // Final scale is AppearanceWindowScale/MonitorScale, it gives 100% for 2x monitor scale and 2x display scale in apps that use gtk scalings, 
+                        // 50% for 2x monitor scale in apps that do not use window scaling, 
+                        // 200% for 1x monitor scale and 2x display scale in apps that use window scaling, 
+                        // 100% for 1x monitor scale in apps that do not use window scaling, 
+                        // 133% for 1.5x monitor scale in apps that use window scaling, 
+                        // 66% for 1.5x monitor scale in apps that do not use window scaling
+                        // Thus it is pointless to perform any mathematics for getting precise size and use gtk scale just to behave like other apps
+                        
+                        scalingFactors = xRandrMonitors.ToDictionary(x => x.Name, x => Math.Max(
+                            variablesMap.TryGetValue(x, out var variableValue) ? variableValue : 1.0,
+                            gtkMap.TryGetValue(x, out var gtkMonitor) ? gtkMonitor.Scale : 1.0));
+                    }
+                    else
+                    {
+                        // Unlike wayland fractional scaling Cinnamon downscales frame rendered in higher resolution, to avoid blur.
+                        // For example physical UI elements size in 3840x2160 resolution with 1.25 scale is equivalent to size in 3072x1920 resolution.
+                        // But rendering to 3072x1920 and then upscaling to 3840x2160 will cause weird blur. So rendered area is 
+                        // increased by 2 to 6144x3840 and then downscaled to 3840x2160. 
 
-                    // But because fractional multiplier is already applied to render area size, it should not be applied again on app-level, 
-                    // app should just consider doubled dimensions of render area.
+                        // Render area size (R) is R=D*M where D - real display resolution and M - matrix scale transformation factor 
+                        // Matrix scale M=2/S where S - scale factor set in system settings (1.25, 1.75 etc). 
+                        // i.e. 3840x2160 * 2/1.25 = 6144x3840. 
 
-                    // XFCE fractional scaling uses same downscaling approach but it is completely broken
-                    // Matrix scale transformation is set to user values from display settings as is, so R=S*M, and most applications are always rendered 100%,
-                    // Gtk values are same for all monitors and are set in Appearance - window scaling, and not affected by per monitor scale in display settings. Some apps consider this value.
-                    // Final scale is AppearanceWindowScale/MonitorScale, it gives 100% for 2x monitor scale and 2x display scale in apps that use gtk scalings, 
-                    // 50% for 2x monitor scale in apps that do not use window scaling, 
-                    // 200% for 1x monitor scale and 2x display scale in apps that use window scaling, 
-                    // 100% for 1x monitor scale in apps that do not use window scaling, 
-                    // 133% for 1.5x monitor scale in apps that use window scaling, 
-                    // 66% for 1.5x monitor scale in apps that do not use window scaling
-                    // Thus it is pointless to perform any mathematics for getting precise size and use gtk scale just to behave like other apps
+                        // But because fractional multiplier is already applied to render area size, it should not be applied again on app-level, 
+                        // app should just consider doubled dimensions of render area.
 
-                    scalingFactors = xRandrMonitors.ToDictionary(x => x.Name, _ => 2.0);
+                        scalingFactors = xRandrMonitors.ToDictionary(x => x.Name, _ => 2.0);
+                    }
                 }
                 else
                 {
