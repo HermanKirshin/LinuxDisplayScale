@@ -42,11 +42,13 @@ public sealed class WaylandMonitorInfo
         
         public unsafe MonitorList()
         {
-            if (!LibWayland.Exists || !EnvironmentVariables.IsWayland)
+            if (!LibWayland.Exists)
                 return;
             
             var display = LibWayland.wl_display_connect(null);
-
+            if (display == null)
+                return;
+            
             var registry = LibWayland.wl_display_get_registry(display);
 
             var registryListener = new wl_registry_listener(OnRegistryGlobal, OnRegistryGlobalRemove, out var registryListenerKeepAlive);
