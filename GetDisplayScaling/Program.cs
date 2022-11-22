@@ -108,8 +108,6 @@ namespace GetDisplayScale
                         return variableValue;
                     return 1;
                 });
-                
-                return scalingFactors;
             }
 
             return scalingFactors;
