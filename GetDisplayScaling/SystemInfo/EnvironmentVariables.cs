@@ -4,6 +4,7 @@ namespace GetDisplayScaling.SystemInfo;
 
 public static class EnvironmentVariables
 {
+    // XDG_SESSION_TYPE may be missing, i.e. in WSL
     public static bool IsWayland => Environment.GetEnvironmentVariable("XDG_SESSION_TYPE")?.Contains("wayland", StringComparison.OrdinalIgnoreCase) == true;
 
     public static double? QtScaleFactor => double.TryParse(Environment.GetEnvironmentVariable("QT_SCALE_FACTOR"), NumberStyles.Any, CultureInfo.InvariantCulture, out var result) ? result : null;

@@ -22,7 +22,7 @@ namespace GetDisplayScale
         private static IReadOnlyDictionary<string, double> CalculateScalingFactors()
         {
             var xRandrMonitors = XRandrMonitorInfo.Enumerate();
-            var gtkMonitors = GtkMonitorInfo.Enumerate(EnvironmentVariables.IsWayland || xRandrMonitors.Any(x => x.Name.Contains("XWAYLAND", StringComparison.OrdinalIgnoreCase)));
+            var gtkMonitors = GtkMonitorInfo.Enumerate();
             var waylandMonitors = WaylandMonitorInfo.Enumerate();
             var kdeWaylandMonitors = KdeWaylandMonitorInfo.Enumerate();
             var xftScale = XResourcesInfo.GetXftDpi() / 96.0;

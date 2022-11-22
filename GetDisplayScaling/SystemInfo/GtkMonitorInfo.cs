@@ -38,12 +38,23 @@ public sealed class GtkMonitorInfo
         HeightMm = LibGdk.gdk_monitor_get_height_mm(monitor);
     }
 
-    public static unsafe IReadOnlyList<GtkMonitorInfo> Enumerate(bool isWayland)
+    public static unsafe IReadOnlyList<GtkMonitorInfo> Enumerate()
     {
         var result = new List<GtkMonitorInfo>();
 
         if (!LibGtk.Exists || !LibGdk.Exists)
             return result;
+
+        var isWayland = false;
+        if (LibWayland.Exists)
+        {
+            var waylandDisplay = LibWayland.wl_display_connect(null);
+            if (waylandDisplay != null)
+            {
+                isWayland = true;
+                LibWayland.wl_display_disconnect(waylandDisplay);
+            }
+        }
         
         LibGtk.gtk_init_check(0, IntPtr.Zero);
             
