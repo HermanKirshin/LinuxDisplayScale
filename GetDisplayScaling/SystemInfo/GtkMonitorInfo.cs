@@ -38,7 +38,7 @@ public sealed class GtkMonitorInfo
         HeightMm = LibGdk.gdk_monitor_get_height_mm(monitor);
     }
 
-    public static unsafe IReadOnlyList<GtkMonitorInfo> Enumerate()
+    public static unsafe IReadOnlyList<GtkMonitorInfo> Enumerate(bool isWayland)
     {
         var result = new List<GtkMonitorInfo>();
 
@@ -63,7 +63,7 @@ public sealed class GtkMonitorInfo
                 continue;
             
             // On wayland gdk_x11_screen_get_monitor_output fails with segfault, so we cannot get XID to match gtk monitor with xrandr one - get scale factors via wayland api instead
-            var xid = EnvironmentVariables.IsWayland ? default(IntPtr?) : LibGdk.gdk_x11_screen_get_monitor_output(screen, i);
+            var xid = isWayland ? default(IntPtr?) : LibGdk.gdk_x11_screen_get_monitor_output(screen, i);
             result.Add(new GtkMonitorInfo(monitor, xid));
         }
 
