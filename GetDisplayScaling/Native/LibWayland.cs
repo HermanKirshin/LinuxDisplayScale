@@ -277,12 +277,12 @@ public unsafe struct wl_output_listener
 public unsafe struct wl_registry_listener
 {
     public delegate void global_callback(void *data, wl_registry *wl_registry, uint name, [MarshalAs(UnmanagedType.LPStr)] string @interface, uint version);
-    public delegate void global_revove_callback(void *data, wl_registry *wl_registry, uint name);
+    public delegate void global_remove_callback(void *data, wl_registry *wl_registry, uint name);
     
     public IntPtr global; 
     public IntPtr global_remove;
     
-    public wl_registry_listener(global_callback global, global_revove_callback global_remove, out Action keepAlive)
+    public wl_registry_listener(global_callback global, global_remove_callback global_remove, out Action keepAlive)
     {
         this.global = global == null ? IntPtr.Zero : Marshal.GetFunctionPointerForDelegate(global);
         this.global_remove = global_remove == null ? IntPtr.Zero : Marshal.GetFunctionPointerForDelegate(global_remove);
