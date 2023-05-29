@@ -9,7 +9,7 @@ public static class GSettings
 
     // terminal command - check if "gsettings get org.gnome.mutter experimental-features" contains "['scale-monitor-framebuffer']"
     public static bool HasFractionalScaling() => HasOption("scale-monitor-framebuffer");
-    
+
     private static unsafe bool HasOption(string name)
     {
         var schema = GetSchema();
@@ -19,7 +19,7 @@ public static class GSettings
         var settings = LibGdk.g_settings_new("org.gnome.mutter");
         if (settings == null)
             return false;
-            
+
         var stringArrayPtr = LibGdk.g_settings_get_strv(settings, "experimental-features");
         while (true)
         {
@@ -40,7 +40,7 @@ public static class GSettings
     {
         if (!LibGdk.Exists)
             return null;
-        
+
         var schemaSource = LibGdk.g_settings_schema_source_get_default();
         return schemaSource == null ? null : LibGdk.g_settings_schema_source_lookup(schemaSource, "org.gnome.mutter", false);
     }

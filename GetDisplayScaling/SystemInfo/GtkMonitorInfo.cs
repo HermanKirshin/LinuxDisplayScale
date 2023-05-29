@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using GetDisplayScaling.Native;
 
 namespace GetDisplayScaling.SystemInfo;
@@ -8,16 +9,16 @@ public sealed class GtkMonitorInfo
     public int Y { get; }
     public int Width { get; }
     public int Height { get; }
-            
+
     public bool IsPrimary { get; }
-            
+
     public int Scale { get; }
-            
+
     public IntPtr? XId { get; }
-            
+
     public string Manufacturer { get; }
     public string Model { get; }
-            
+
     public int WidthMm { get; }
     public int HeightMm { get; }
 
@@ -40,10 +41,8 @@ public sealed class GtkMonitorInfo
 
     public static unsafe IReadOnlyList<GtkMonitorInfo> Enumerate()
     {
-        var result = new List<GtkMonitorInfo>();
-
         if (!LibGtk.Exists || !LibGdk.Exists)
-            return result;
+            return new ReadOnlyCollection<GtkMonitorInfo>(Array.Empty<GtkMonitorInfo>());
 
         var isWayland = false;
         if (LibWayland.Exists)
@@ -55,29 +54,31 @@ public sealed class GtkMonitorInfo
                 LibWayland.wl_display_disconnect(waylandDisplay);
             }
         }
-        
+
+        var result = new List<GtkMonitorInfo>();
+
         LibGtk.gtk_init_check(0, IntPtr.Zero);
-            
+
         var display = LibGdk.gdk_display_get_default();
         if (display == null)
             return result;
-        
+
         var screen = LibGdk.gdk_display_get_default_screen(display);
         if (screen == null)
             return result;
         var monitorsCount = LibGdk.gdk_display_get_n_monitors(display);
-        
+
         for (var i = 0; i < monitorsCount; i++)
         {
             var monitor = LibGdk.gdk_display_get_monitor(display, i);
             if (monitor == null)
                 continue;
-            
+
             // On wayland gdk_x11_screen_get_monitor_output fails with segfault, so we cannot get XID to match gtk monitor with xrandr one - get scale factors via wayland api instead
             var xid = isWayland ? default(IntPtr?) : LibGdk.gdk_x11_screen_get_monitor_output(screen, i);
             result.Add(new GtkMonitorInfo(monitor, xid));
         }
 
-        return result.AsReadOnly();
+        return result;
     }
 }
